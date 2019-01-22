@@ -25,7 +25,9 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.AssetManager;
 import android.content.res.Resources;
+import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.os.AsyncResult;
 import android.os.Build;
@@ -52,6 +54,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.TimeUtils;
 
@@ -213,7 +216,7 @@ final class GsmServiceStateTracker extends ServiceStateTracker {
         mPhone = phone;
         mCellLoc = new GsmCellLocation();
         mNewCellLoc = new GsmCellLocation();
-        mSpnOverride = new SpnOverride();
+        mSpnOverride = SpnOverride.getInstance();
 
         PowerManager powerManager =
                 (PowerManager)phone.getContext().getSystemService(Context.POWER_SERVICE);
@@ -1607,10 +1610,25 @@ final class GsmServiceStateTracker extends ServiceStateTracker {
      */
     private boolean isOperatorConsideredNonRoaming(ServiceState s) {
         String operatorNumeric = s.getOperatorNumeric();
-        String[] numericArray = mPhone.getContext().getResources().getStringArray(
-                    com.android.internal.R.array.config_operatorConsideredNonRoaming);
+        if (operatorNumeric == null || operatorNumeric.length() < 5) {
+            return false;
+        }
 
-        if (numericArray.length == 0 || operatorNumeric == null) {
+        String simNumeric = getSystemProperty(TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC, "");
+        if (simNumeric == null || simNumeric.length() < 5) {
+            return false;
+        }
+
+        Configuration c = new Configuration(mPhone.getContext().getResources().getConfiguration());
+        DisplayMetrics m = new DisplayMetrics();
+        m.setTo(mPhone.getContext().getResources().getDisplayMetrics());
+        c.mcc = Integer.parseInt(simNumeric.substring(0, 3));
+        c.mnc = Integer.parseInt(simNumeric.substring(3));
+        Resources r = new Resources(new AssetManager(), m, c);
+
+        String[] numericArray = r.getStringArray(com.android.internal.R.array.config_operatorConsideredNonRoaming);
+
+        if (numericArray != null && numericArray.length == 0 || operatorNumeric == null) {
             return false;
         }
 
@@ -1619,15 +1637,31 @@ final class GsmServiceStateTracker extends ServiceStateTracker {
                 return true;
             }
         }
+
         return false;
     }
 
     private boolean isOperatorConsideredRoaming(ServiceState s) {
         String operatorNumeric = s.getOperatorNumeric();
-        String[] numericArray = mPhone.getContext().getResources().getStringArray(
-                    com.android.internal.R.array.config_sameNamedOperatorConsideredRoaming);
+        if (operatorNumeric == null || operatorNumeric.length() < 5) {
+            return false;
+        }
 
-        if (numericArray.length == 0 || operatorNumeric == null) {
+        String simNumeric = getSystemProperty(TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC, "");
+        if (simNumeric == null || simNumeric.length() < 5) {
+            return false;
+        }
+
+        Configuration c = new Configuration(mPhone.getContext().getResources().getConfiguration());
+        DisplayMetrics m = new DisplayMetrics();
+        m.setTo(mPhone.getContext().getResources().getDisplayMetrics());
+        c.mcc = Integer.parseInt(simNumeric.substring(0, 3));
+        c.mnc = Integer.parseInt(simNumeric.substring(3));
+        Resources r = new Resources(new AssetManager(), m, c);
+
+        String[] numericArray = r.getStringArray(com.android.internal.R.array.config_sameNamedOperatorConsideredRoaming);
+
+        if (numericArray != null && numericArray.length == 0 || operatorNumeric == null) {
             return false;
         }
 
@@ -1636,6 +1670,7 @@ final class GsmServiceStateTracker extends ServiceStateTracker {
                 return true;
             }
         }
+
         return false;
     }
 

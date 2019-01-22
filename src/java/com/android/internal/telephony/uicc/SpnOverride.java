@@ -32,13 +32,21 @@ import android.util.Xml;
 import com.android.internal.util.XmlUtils;
 
 public class SpnOverride {
-    private HashMap<String, String> mCarrierSpnMap;
 
+    // Singleton instance (avoid parsing spn-conf.xml file over and over again)
+    // after making changes to etc/spn-conf.xml, a reboot will be necessary anyway
+    private static final SpnOverride INSTANCE = new SpnOverride();
 
     static final String LOG_TAG = "SpnOverride";
     static final String PARTNER_SPN_OVERRIDE_PATH ="etc/spn-conf.xml";
 
-    public SpnOverride () {
+    private HashMap<String, String> mCarrierSpnMap;
+
+    public static SpnOverride getInstance() {
+        return INSTANCE;
+    }
+
+    private SpnOverride () {
         mCarrierSpnMap = new HashMap<String, String>();
         loadSpnOverrides();
     }

@@ -22,6 +22,7 @@ package com.android.internal.telephony.uicc;
 import android.content.Context;
 import android.content.Intent;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 
 import android.os.AsyncResult;
 import android.os.Handler;
@@ -66,7 +67,7 @@ public abstract class IccRecords extends Handler implements IccConstants {
 
     protected AdnRecordCache mAdnCache;
 
-    private SpnOverride mSpnOverride;
+    private SpnOverride mSpnOverride = SpnOverride.getInstance();
 
     // ***** Cached SIM State; cleared on channel close
 
@@ -131,7 +132,7 @@ public abstract class IccRecords extends Handler implements IccConstants {
                 + " mCi=" + mCi
                 + " mFh=" + mFh
                 + " mParentApp=" + mParentApp
-                + " mSpnOverride=" + "mSpnOverride"
+                + " mSpnOverride=" + mSpnOverride
                 + " recordsLoadedRegistrants=" + mRecordsLoadedRegistrants
                 + " mImsiReadyRegistrants=" + mImsiReadyRegistrants
                 + " mRecordsEventsRegistrants=" + mRecordsEventsRegistrants
@@ -184,7 +185,6 @@ public abstract class IccRecords extends Handler implements IccConstants {
         } else {
             mCi.registerForIccRefresh(this, EVENT_REFRESH, null);
         }
-        mSpnOverride = new SpnOverride();
     }
 
     /**
@@ -446,7 +446,8 @@ public abstract class IccRecords extends Handler implements IccConstants {
     }
 
     protected void setSpnFromConfig(String carrier) {
-        if (mSpnOverride.containsCarrier(carrier)) {
+        String origSpn = getServiceProviderName();
+        if (TextUtils.isEmpty(origSpn) && mSpnOverride.containsCarrier(carrier)) {
             String overrideSpn = mSpnOverride.getSpn(carrier);
             log("set override spn carrier: " + carrier + ", spn: " + overrideSpn);
             setServiceProviderName(overrideSpn);

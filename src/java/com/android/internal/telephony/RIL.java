@@ -275,6 +275,8 @@ public class RIL extends BaseCommands implements CommandsInterface {
     // until dec'd to 0
     int mWakeLockCount;
 
+    SpnOverride spnOverride = SpnOverride.getInstance();
+
     SparseArray<RILRequest> mRequestList = new SparseArray<RILRequest>();
 
     Object     mLastNITZTimeInfo;
@@ -4011,9 +4013,6 @@ public class RIL extends BaseCommands implements CommandsInterface {
         String strings[] = (String [])responseStrings(p);
         ArrayList<OperatorInfo> ret;
 
-        // FIXME: What is this really doing
-        SpnOverride spnOverride = new SpnOverride();
-
         if (strings.length % mQANElements != 0) {
             throw new RuntimeException(
                 "RIL_REQUEST_QUERY_AVAILABLE_NETWORKS: invalid response. Got "
@@ -4032,7 +4031,7 @@ public class RIL extends BaseCommands implements CommandsInterface {
             ret.add (
                 new OperatorInfo(
                     strOperatorLong,
-                    strings[i+1],
+                    strOperatorLong, // strings[i+1],
                     strings[i+2],
                     strings[i+3]));
         }

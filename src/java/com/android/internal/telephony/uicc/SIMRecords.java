@@ -24,6 +24,9 @@ import static com.android.internal.telephony.TelephonyProperties.PROPERTY_ICC_OP
 import static com.android.internal.telephony.TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC;
 
 import android.content.Context;
+import android.content.res.AssetManager;
+import android.content.res.Resources;
+import android.content.res.Configuration;
 import android.os.AsyncResult;
 import android.os.Message;
 import android.os.SystemProperties;
@@ -33,6 +36,7 @@ import android.telephony.SmsMessage;
 import android.text.TextUtils;
 import android.telephony.Rlog;
 import android.content.res.Resources;
+import android.util.DisplayMetrics;
 
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.MccTable;
@@ -232,8 +236,10 @@ public class SIMRecords extends IccRecords {
         mMncLength = UNINITIALIZED;
         log("setting0 mMncLength" + mMncLength);
         mIccId = null;
+        // awl: setting to -1 is nonsense, when testing afterwards for bits set (& 0x01, & 0x02) because -1 means all bits set (0xff..ff)
         // -1 means no EF_SPN found; treat accordingly.
-        mSpnDisplayCondition = -1;
+        // mSpnDisplayCondition = -1;
+        mSpnDisplayCondition = 0x100;
         mEfMWIS = null;
         mEfCPHS_MWI = null;
         mSpdiNetworks = null;
@@ -1637,6 +1643,7 @@ public class SIMRecords extends IccRecords {
     @Override
     public int getDisplayRule(String plmn) {
         int rule;
+
         if ((mContext != null) && mContext.getResources().getBoolean(
                 com.android.internal.R.bool.def_telephony_spn_spec_enabled)) {
             rule = SPN_RULE_SHOW_SPN;
@@ -1645,9 +1652,9 @@ public class SIMRecords extends IccRecords {
 
         if (mParentApp != null && mParentApp.getUiccCard() != null &&
             mParentApp.getUiccCard().getOperatorBrandOverride() != null) {
-        // If the operator has been overridden, treat it as the SPN file on the SIM did not exist.
+            // If the operator has been overridden, treat it as the SPN file on the SIM did not exist.
             rule = SPN_RULE_SHOW_PLMN;
-        } else if (TextUtils.isEmpty(getServiceProviderName()) || mSpnDisplayCondition == -1) {
+        } else if (TextUtils.isEmpty(getServiceProviderName()) || mSpnDisplayCondition == 0x100) {
             // No EF_SPN content was found on the SIM, or not yet loaded.  Just show ONS.
             rule = SPN_RULE_SHOW_PLMN;
         } else if (isOnMatchingPlmn(plmn)) {
@@ -1676,6 +1683,14 @@ public class SIMRecords extends IccRecords {
             return true;
         }
 
+        if (isOperatorConsideredNonRoaming(plmn)) {
+            return true;
+        }
+
+        if (isOperatorConsideredRoaming(plmn)) {
+            return false;
+        }
+
         if (mSpdiNetworks != null) {
             for (String spdiNet : mSpdiNetworks) {
                 if (plmn.equals(spdiNet)) {
@@ -1685,6 +1700,87 @@ public class SIMRecords extends IccRecords {
         }
         return false;
     }
+
+    /**
+     * Do not set roaming state in case of oprators considered non-roaming.
+     *
+     + Can use mcc or mcc+mnc as item of config_operatorConsideredNonRoaming.
+     * For example, 302 or 21407. If mcc or mcc+mnc match with operator,
+     * don't set roaming state.
+     *
+     * @param s ServiceState hold current ons
+     * @return false for roaming state set
+     */
+    private boolean isOperatorConsideredNonRoaming(String plmn) {
+        if (mContext != null) {
+
+            if (plmn == null || plmn.length() < 5) {
+                return false;
+            }
+
+            String simNumeric = getOperatorNumeric();
+            if (simNumeric == null || simNumeric.length() < 5) {
+                return false;
+            }
+
+            Configuration c = new Configuration(mContext.getResources().getConfiguration());
+            DisplayMetrics m = new DisplayMetrics();
+            m.setTo(mContext.getResources().getDisplayMetrics());
+            c.mcc = Integer.parseInt(simNumeric.substring(0, 3));
+            c.mnc = Integer.parseInt(simNumeric.substring(3));
+            Resources r = new Resources(new AssetManager(), m, c);
+
+            String[] numericArray = r.getStringArray(com.android.internal.R.array.config_operatorConsideredNonRoaming);
+
+            if (numericArray != null && numericArray.length == 0 || plmn == null || plmn.length() == 0) {
+                return false;
+            }
+
+            for (String numeric : numericArray) {
+                if (plmn.startsWith(numeric)) {
+                    return true;
+                }
+            }
+
+        }
+
+        return false;
+    }
+
+    private boolean isOperatorConsideredRoaming(String plmn) {
+        if (mContext != null) {
+
+            if (plmn == null || plmn.length() < 5) {
+                return false;
+            }
+
+            String simNumeric = getOperatorNumeric();
+            if (simNumeric == null || simNumeric.length() < 5) {
+                return false;
+            }
+
+            Configuration c = new Configuration(mContext.getResources().getConfiguration());
+            DisplayMetrics m = new DisplayMetrics();
+            m.setTo(mContext.getResources().getDisplayMetrics());
+            c.mcc = Integer.parseInt(simNumeric.substring(0, 3));
+            c.mnc = Integer.parseInt(simNumeric.substring(3));
+            Resources r = new Resources(new AssetManager(), m, c);
+
+            String[] numericArray = r.getStringArray(com.android.internal.R.array.config_sameNamedOperatorConsideredRoaming);
+
+            if (numericArray != null && numericArray.length == 0 || plmn == null || plmn.length() == 0) {
+                return false;
+            }
+
+            for (String numeric : numericArray) {
+                if (plmn.startsWith(numeric)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 
     /**
      * States of Get SPN Finite State Machine which only used by getSpnFsm()
@@ -1757,7 +1853,6 @@ public class SIMRecords extends IccRecords {
                     if (!TextUtils.isEmpty(getServiceProviderName())) {
                         foundSpn = true;
                     }
-
                     mSpnState = GetSpnFsmState.IDLE;
                 }
                 if (!foundSpn) {
@@ -1769,7 +1864,7 @@ public class SIMRecords extends IccRecords {
 
                     // See TS 51.011 10.3.11.  Basically, default to
                     // show PLMN always, and SPN also if roaming.
-                    mSpnDisplayCondition = -1;
+                    mSpnDisplayCondition = 0x100;
                 }
                 break;
             case READ_SPN_CPHS:
